@@ -766,53 +766,60 @@ class AuthAPI(AuthAPIBase):
             url = self._api_url + uri + "?" + query_string
 
         params = {"url": url, "params": {}}
+        
+        #init variables for backoff and recovery from binance  
+        ntry, maxtries = (0, 3)
 
-        try:
-            resp = self._dispatch_request(method)(**params)
+        while (ntry <=maxtries):
+            ntry+=1
+            try:
+                resp = self._dispatch_request(method)(**params)
 
-            if "msg" in resp.json():
-                resp_message = resp.json()["msg"]
-            elif "message" in resp.json():
-                resp_message = resp.json()["message"]
-            else:
-                resp_message = ""
-
-            if resp.status_code == 400 and (
-                resp_message
-                == "Timestamp for this request is outside of the recvWindow."
-            ):
-                message = f"{method} ({resp.status_code}) {self._api_url}{uri} - {resp_message} (hint: increase recvWindow with --recvWindow <5000-60000>)"
-                Logger.error(f"Error: {message}")
-                return {}
-            elif resp.status_code == 429 and (
-                resp_message.startswith("Too much request weight used")
-            ):
-                message = f"{method} ({resp.status_code}) {self._api_url}{uri} - {resp_message} (sleeping for 5 seconds to prevent being banned)"
-                Logger.error(f"Error: {message}")
-                time.sleep(5)
-                return {}
-            elif resp.status_code != 200:
-                message = f"{method} ({resp.status_code}) {self._api_url}{uri} - {resp_message}"
-                if self.die_on_api_error:
-                    raise Exception(message)
+                if "msg" in resp.json():
+                    resp_message = resp.json()["msg"]
+                elif "message" in resp.json():
+                    resp_message = resp.json()["message"]
                 else:
+                    resp_message = ""
+
+                if resp.status_code == 400 and (
+                    resp_message == "Timestamp for this request is outside of the recvWindow."):
+                    message = f"{method} ({resp.status_code}) {self._api_url}{uri} - {resp_message} (hint: increase recvWindow with --recvWindow <5000-60000>)"
                     Logger.error(f"Error: {message}")
                     return {}
+                elif resp.status_code == 429 and (resp_message.startswith("Too much request weight used")):
+                    #message = f"{method} ({resp.status_code}) {self._api_url}{uri} - {resp_message} (sleeping to prevent banning)"
+                    #Logger.error(f"Error: {message}")
+                    #time.sleep(5)
+                    if ntry==maxtries: 
+                        return {}
+                    else: 
+                        wait_time = int(resp.headers['retry-after'])
+                        Logger.info(f"Waiting for {wait_time} seconds to avoid banning")
+                        time.sleep(wait_time)
+                elif resp.status_code != 200:
+                    message = f"{method} ({resp.status_code}) {self._api_url}{uri} - {resp_message}"
+                    if self.die_on_api_error:
+                        raise Exception(message)
+                    else:
+                        Logger.error(f"Error: {message}")
+                        return {}
+                resp.raise_for_status()
+                return resp.json()
+            except requests.ConnectionError as err:
+                if ntry == maxtries:
+                    return self.handle_api_error(err, "ConnectionError")
+            except requests.exceptions.HTTPError as err:
+                return self.handle_api_error(err, "HTTPError")
 
-            resp.raise_for_status()
-            return resp.json()
+            except requests.Timeout as err:
+                if ntry == maxtries:
+                    return self.handle_api_error(err, "Timeout")
 
-        except requests.ConnectionError as err:
-            return self.handle_api_error(err, "ConnectionError")
+            except json.decoder.JSONDecodeError as err:
+                return self.handle_api_error(err, "JSONDecodeError")
 
-        except requests.exceptions.HTTPError as err:
-            return self.handle_api_error(err, "HTTPError")
-
-        except requests.Timeout as err:
-            return self.handle_api_error(err, "Timeout")
-
-        except json.decoder.JSONDecodeError as err:
-            return self.handle_api_error(err, "JSONDecodeError")
+            time.sleep(ntry**2)
 
     def handle_api_error(self, err: str, reason: str) -> dict:
         """Handler for API errors"""
@@ -877,7 +884,7 @@ class PublicAPI(AuthAPIBase):
             return pd.DataFrame()
 
     def getTicker(self, market: str = DEFAULT_MARKET, websocket=None) -> tuple:
-        """Retrieves the market ticker"""
+        """Retrives the market ticker"""
 
         # validates the market is syntactically correct
         if not self._isMarketValid(market):
