@@ -1,0 +1,14 @@
+binance, TRXBUSD, 50
+binance, UNIBUSD,50
+binance, NEOBUSD,50
+binance, ICXBUSD, 50
+binance, AAVEBUSD,50
+binance, FILBUSD, 50
+binance, ONTBUSD,50
+binance, GRTBUSD,50
+binance, EGLDBUSD,50
+binance, ENJBUSD,50
+binance, OMGBUSD,50
+binance, REPBUSD,50
+binance, ZENBUSD,50
+binance, OXTBUSD,50

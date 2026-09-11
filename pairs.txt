@@ -1,0 +1,5 @@
+binance, ICXBUSD, 100
+binance, FILBUSD, 100
+binance, ONTBUSD, 100
+binance, GRTBUSD, 100
+binance, RENUSDT, 100
